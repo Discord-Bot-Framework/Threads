@@ -356,10 +356,15 @@ class ThreadModel:
         if name == TIMEOUT_HISTORY_FILE.name:
             return self.timeout_history
         if name == THREAD_PERMISSIONS_FILE.name:
-            return {thread_id: sorted(users) for thread_id, users in self.thread_permissions.items()}
+            return {
+                thread_id: sorted(users)
+                for thread_id, users in self.thread_permissions.items()
+            }
         if name == BANNED_USERS_FILE.name:
             return {
-                channel_id: {post_id: sorted(users) for post_id, users in post_data.items()}
+                channel_id: {
+                    post_id: sorted(users) for post_id, users in post_data.items()
+                }
                 for channel_id, post_data in self.banned_users.items()
             }
         if name == STARRED_MESSAGES_FILE.name:
@@ -387,7 +392,8 @@ class ThreadModel:
     async def save_scrub_rules(self, file_path: pathlib.Path) -> None:
         del file_path
         desired: dict[bytes, Any] = {
-            str(key).encode("utf-8"): {"key": str(key), "value": value} for key, value in self.rules.items()
+            str(key).encode("utf-8"): {"key": str(key), "value": value}
+            for key, value in self.rules.items()
         }
         self._sync_records("scrub_rules", desired, self._scrub_rules_snapshot)
 
@@ -431,8 +437,12 @@ class ThreadModel:
                 violation_count = record.get("violation_count", 0)
                 last_timeout = record.get("last_timeout", 0.0)
                 parsed[str(user_id)] = {
-                    "violation_count": int(violation_count) if isinstance(violation_count, (int, float)) else 0,
-                    "last_timeout": float(last_timeout) if isinstance(last_timeout, (int, float)) else 0.0,
+                    "violation_count": int(violation_count)
+                    if isinstance(violation_count, (int, float))
+                    else 0,
+                    "last_timeout": float(last_timeout)
+                    if isinstance(last_timeout, (int, float))
+                    else 0.0,
                 }
         self.timeout_history = parsed
         self._timeout_history_snapshot = dict(packed_records)
@@ -447,8 +457,12 @@ class ThreadModel:
             last_timeout = data.get("last_timeout", 0.0)
             desired[str(user_id).encode("utf-8")] = {
                 "user_id": str(user_id),
-                "violation_count": int(violation_count) if isinstance(violation_count, (int, float)) else 0,
-                "last_timeout": float(last_timeout) if isinstance(last_timeout, (int, float)) else 0.0,
+                "violation_count": int(violation_count)
+                if isinstance(violation_count, (int, float))
+                else 0,
+                "last_timeout": float(last_timeout)
+                if isinstance(last_timeout, (int, float))
+                else 0.0,
             }
         self._sync_records("timeout_history", desired, self._timeout_history_snapshot)
 
@@ -505,7 +519,9 @@ class ThreadModel:
                 users = record.get("users")
                 if not isinstance(thread_id, (str, int)) or not isinstance(users, list):
                     continue
-                normalized[str(thread_id)] = {str(user_id) for user_id in users if isinstance(user_id, (str, int))}
+                normalized[str(thread_id)] = {
+                    str(user_id) for user_id in users if isinstance(user_id, (str, int))
+                }
         self.thread_permissions = normalized
         self._thread_permissions_snapshot = dict(packed_records)
 
@@ -587,7 +603,9 @@ class ThreadModel:
                 elif key_text == "cfg:threshold_history":
                     value = record.get("value")
                     if isinstance(value, list):
-                        threshold_history = [item for item in value if isinstance(item, dict)]
+                        threshold_history = [
+                            item for item in value if isinstance(item, dict)
+                        ]
 
         self.starred_messages = starred_messages
         self.starboard_messages = starboard_messages
@@ -654,7 +672,8 @@ class ThreadModel:
             weekly=self._normalize_stats_bucket(weekly),
             threshold_history=(
                 threshold_history.get("history", [])
-                if isinstance(threshold_history, dict) and isinstance(threshold_history.get("history"), list)
+                if isinstance(threshold_history, dict)
+                and isinstance(threshold_history.get("history"), list)
                 else []
             ),
             last_adjustment=self._normalize_dt(last_adjustment),
@@ -708,17 +727,27 @@ class ThreadModel:
         one_hour_ago = now - timedelta(hours=1)
         for history in (self.message_history, self.violation_history):
             for key in list(history.keys()):
-                history[key] = [entry for entry in history[key] if entry >= one_hour_ago]
+                history[key] = [
+                    entry for entry in history[key] if entry >= one_hour_ago
+                ]
                 if not history[key]:
                     del history[key]
 
         total_messages = sum(len(values) for values in self.message_history.values())
-        total_violations = sum(len(values) for values in self.violation_history.values())
-        violation_rate = (total_violations * 100 / total_messages) if total_messages else 0
+        total_violations = sum(
+            len(values) for values in self.violation_history.values()
+        )
+        violation_rate = (
+            (total_violations * 100 / total_messages) if total_messages else 0
+        )
 
         cfg = self.timeout_config
-        activity_factor = (total_messages > cfg.high_activity_threshold) - (total_messages < cfg.low_activity_threshold)
-        violation_factor = (violation_rate > cfg.high_violation_rate) - (violation_rate < cfg.low_violation_rate)
+        activity_factor = (total_messages > cfg.high_activity_threshold) - (
+            total_messages < cfg.low_activity_threshold
+        )
+        violation_factor = (violation_rate > cfg.high_violation_rate) - (
+            violation_rate < cfg.low_violation_rate
+        )
         total_factor = activity_factor + violation_factor
 
         cfg.base_duration = max(
@@ -748,33 +777,44 @@ class ThreadModel:
         )
 
         last_timeout = user_data.get("last_timeout")
-        last_timeout_ts = float(last_timeout) if isinstance(last_timeout, (float, int)) else current_ts
+        last_timeout_ts = (
+            float(last_timeout)
+            if isinstance(last_timeout, (float, int))
+            else current_ts
+        )
         decay_periods = int(
             (current_ts - last_timeout_ts) / (self.timeout_config.decay_hours * 3600),
         )
 
         current_count = user_data.get("violation_count")
-        violation_count = int(current_count) if isinstance(current_count, (int, float)) else 0
+        violation_count = (
+            int(current_count) if isinstance(current_count, (int, float)) else 0
+        )
         violation_count = max(1, violation_count - decay_periods + 1)
 
         user_data["violation_count"] = violation_count
         user_data["last_timeout"] = current_ts
 
         duration = int(
-            self.timeout_config.base_duration * (self.timeout_config.multiplier ** (violation_count - 1)),
+            self.timeout_config.base_duration
+            * (self.timeout_config.multiplier ** (violation_count - 1)),
         )
         return min(duration, self.timeout_config.max_duration)
 
     async def adjust_star_threshold(self) -> None:
         now = datetime.now(UTC)
-        if (now - self.star_stats.last_adjustment).total_seconds() < self.star_config.adjustment_interval:
+        if (
+            now - self.star_stats.last_adjustment
+        ).total_seconds() < self.star_config.adjustment_interval:
             return
 
         hourly_stars = sum(self.star_stats.hourly.values())
         daily_stars = sum(self.star_stats.daily.values())
         weekly_stars = sum(self.star_stats.weekly.values())
 
-        activity_score = (hourly_stars / 10 + daily_stars / 200 + weekly_stars / 1000) / 3
+        activity_score = (
+            hourly_stars / 10 + daily_stars / 200 + weekly_stars / 1000
+        ) / 3
 
         if 0 <= now.hour < 6:
             time_factor = 0.8
@@ -817,15 +857,23 @@ class ThreadModel:
                 },
             )
             if len(self.star_stats.threshold_history) > 100:
-                self.star_stats.threshold_history = self.star_stats.threshold_history[-100:]
+                self.star_stats.threshold_history = self.star_stats.threshold_history[
+                    -100:
+                ]
 
         hour_cutoff = (now - timedelta(hours=24)).isoformat()
         day_cutoff = (now - timedelta(days=7)).isoformat()
         week_cutoff = (now - timedelta(weeks=4)).isoformat()
 
-        self.star_stats.hourly = {k: v for k, v in self.star_stats.hourly.items() if k >= hour_cutoff}
-        self.star_stats.daily = {k: v for k, v in self.star_stats.daily.items() if k >= day_cutoff}
-        self.star_stats.weekly = {k: v for k, v in self.star_stats.weekly.items() if k >= week_cutoff}
+        self.star_stats.hourly = {
+            k: v for k, v in self.star_stats.hourly.items() if k >= hour_cutoff
+        }
+        self.star_stats.daily = {
+            k: v for k, v in self.star_stats.daily.items() if k >= day_cutoff
+        }
+        self.star_stats.weekly = {
+            k: v for k, v in self.star_stats.weekly.items() if k >= week_cutoff
+        }
         self.star_stats.last_adjustment = now
 
     def is_user_banned(self, channel_id: str, post_id: str, user_id: str) -> bool:
@@ -1056,8 +1104,13 @@ async def log_action_internal(details: ActionDetails) -> None:
             if len(chunks) > 1:
                 field_name = f"{name} (Part {index}/{len(chunks)})"
 
-            total_field_size = sum(len(str(item.value)) for item in current_embed.fields)
-            if len(current_embed.fields) >= 25 or (total_field_size + len(chunk)) > 6000:
+            total_field_size = sum(
+                len(str(item.value)) for item in current_embed.fields
+            )
+            if (
+                len(current_embed.fields) >= 25
+                or (total_field_size + len(chunk)) > 6000
+            ):
                 embeds.append(current_embed)
                 current_embed = await reply_embed(
                     plugin.client,
@@ -1142,12 +1195,21 @@ def _normalize_message_text(content: str) -> str:
 
 
 def _tokenize_for_similarity(content: str) -> set[str]:
-    return {match.group(0) for match in TOKEN_PATTERN.finditer(content)}
+    tokens = {match.group(0) for match in TOKEN_PATTERN.finditer(content)}
+    if tokens:
+        return tokens
+
+    compact = re.sub(r"\s+", "", content)
+    if not compact:
+        return set()
+    if len(compact) == 1:
+        return {compact}
+    return {compact[i : i + 2] for i in range(len(compact) - 1)}
 
 
 def _jaccard_similarity(tokens_a: set[str], tokens_b: set[str]) -> float:
     if not tokens_a and not tokens_b:
-        return 1.0
+        return 0.0
     union = tokens_a | tokens_b
     if not union:
         return 0.0
@@ -1170,7 +1232,11 @@ def _is_structured_text(content: str) -> bool:
     lines = [line.strip() for line in content.splitlines() if line.strip()]
     if len(lines) < 3:
         return False
-    structured = sum(1 for line in lines if line.startswith(("-", "*", ">")) or bool(re.match(r"^\d+[.)]\s+", line)))
+    structured = sum(
+        1
+        for line in lines
+        if line.startswith(("-", "*", ">")) or bool(re.match(r"^\d+[.)]\s+", line))
+    )
     return structured / len(lines) >= 0.5
 
 
@@ -1268,7 +1334,9 @@ def _cleanup_spam_history(now: datetime) -> None:
         while history and history[0] <= hit_cutoff:
             history.popleft()
     stale_bucket_keys = [
-        key for key, (_, last_refill) in model.spam.rate_buckets.items() if now_ts - last_refill > stale_bucket_seconds
+        key
+        for key, (_, last_refill) in model.spam.rate_buckets.items()
+        if now_ts - last_refill > stale_bucket_seconds
     ]
     for key in stale_bucket_keys:
         del model.spam.rate_buckets[key]
@@ -1357,7 +1425,11 @@ async def check_message_spam(
     attachment_count = len(message.attachments or ())
 
     message_cost = (
-        1.0 + (0.25 * url_count) + (0.2 * mention_count) + (0.3 * attachment_count) + (0.12 * max(0, emoji_count - 3))
+        1.0
+        + (0.25 * url_count)
+        + (0.2 * mention_count)
+        + (0.3 * attachment_count)
+        + (0.12 * max(0, emoji_count - 3))
     )
 
     channel_rapid = _count_recent_messages(
@@ -1484,9 +1556,19 @@ async def check_message_spam(
             {"emoji_count": emoji_count},
         )
 
-    mention_pressure = mention_count / max(1, model.spam_thresholds.max_mentions) if mention_count > 0 else 0.0
+    mention_pressure = (
+        mention_count / max(1, model.spam_thresholds.max_mentions)
+        if mention_count > 0
+        else 0.0
+    )
     emoji_pressure = max(0.0, (emoji_count - 3) * 0.08)
-    risk_score = rate_score + similarity_score + repetition_score + mention_pressure + emoji_pressure
+    risk_score = (
+        rate_score
+        + similarity_score
+        + repetition_score
+        + mention_pressure
+        + emoji_pressure
+    )
 
     if similarity_hits >= model.spam_thresholds.similarity_hit_limit:
         compared_with = matched_record.content if matched_record else None
@@ -1589,7 +1671,8 @@ async def can_manage_post(
         return True
 
     return any(
-        role_id in roles and thread.parent_id in channels for role_id, channels in ROLE_CHANNEL_PERMISSIONS.items()
+        role_id in roles and thread.parent_id in channels
+        for role_id, channels in ROLE_CHANNEL_PERMISSIONS.items()
     )
 
 
@@ -1622,7 +1705,9 @@ class MessageActionSelect(miru.TextSelect):
             miru.SelectOption(
                 label="Unpin Message" if message.is_pinned else "Pin Message",
                 value="unpin" if message.is_pinned else "pin",
-                description="Unpin this message" if message.is_pinned else "Pin this message",
+                description="Unpin this message"
+                if message.is_pinned
+                else "Pin this message",
             ),
         ]
         super().__init__(
@@ -1694,7 +1779,9 @@ class ManageUserSelect(miru.TextSelect):
             miru.SelectOption(
                 label="Revoke Permissions" if has_permissions else "Share Permissions",
                 value="revoke_permissions" if has_permissions else "share_permissions",
-                description="Currently shared" if has_permissions else "Currently not shared",
+                description="Currently shared"
+                if has_permissions
+                else "Currently not shared",
             ),
         ]
         super().__init__(
@@ -1784,7 +1871,7 @@ async def message_actions(ctx: arc.GatewayContext, message: hikari.Message) -> N
         "Managing message",
         "Selecting action to perform on this message.",
     )
-    response_obj = await ctx.respond(embed=embed, components=view)
+    response_obj = await ctx.respond(embed=embed, components=view.build())
     await bind_view_to_response(
         response_obj=response_obj,
         miru_client=get_miru(),
@@ -1883,7 +1970,9 @@ async def manage_user_in_forum_post(
 
     guild = await plugin.client.rest.fetch_guild(GUILD_ID)
     author_member = guild.get_member(ctx.author.id)
-    author_roles = {role.id for role in author_member.get_roles()} if author_member else set()
+    author_roles = (
+        {role.id for role in author_member.get_roles()} if author_member else set()
+    )
 
     if target.id == ctx.author.id and CONGRESS_MEMBER_ROLE not in author_roles:
         await send_error(
@@ -1914,7 +2003,7 @@ async def manage_user_in_forum_post(
             f"Permissions: {'Shared' if has_permissions else 'Not shared'}."
         ),
     )
-    response_obj = await ctx.respond(embed=embed, components=view)
+    response_obj = await ctx.respond(embed=embed, components=view.build())
     await bind_view_to_response(
         response_obj=response_obj,
         miru_client=get_miru(),
@@ -1938,7 +2027,9 @@ async def share_revoke_permissions(
 
     guild = await plugin.client.rest.fetch_guild(GUILD_ID)
     author_member = guild.get_member(ctx.author.id)
-    author_roles = {role.id for role in author_member.get_roles()} if author_member else set()
+    author_roles = (
+        {role.id for role in author_member.get_roles()} if author_member else set()
+    )
 
     if channel.parent_id != CONGRESS_FORUM_ID and channel.owner_id != ctx.author.id:
         await send_error(ctx, "Only thread owner can manage thread permissions.")
@@ -2016,8 +2107,12 @@ async def ban_unban_user(
     author_member = guild.get_member(ctx.author.id)
     target_member = guild.get_member(member.id)
 
-    author_roles = {role.id for role in author_member.get_roles()} if author_member else set()
-    target_roles = {role.id for role in target_member.get_roles()} if target_member else set()
+    author_roles = (
+        {role.id for role in author_member.get_roles()} if author_member else set()
+    )
+    target_roles = (
+        {role.id for role in target_member.get_roles()} if target_member else set()
+    )
 
     if any(
         role_id in target_roles and channel.parent_id in channels
@@ -2028,7 +2123,9 @@ async def ban_unban_user(
 
     if channel.parent_id == CONGRESS_FORUM_ID:
         if CONGRESS_MEMBER_ROLE in author_roles:
-            if action is ActionType.BAN or (action is ActionType.UNBAN and member.id != ctx.author.id):
+            if action is ActionType.BAN or (
+                action is ActionType.UNBAN and member.id != ctx.author.id
+            ):
                 await send_error(
                     ctx,
                     f"Failed to unban - only <@&{CONGRESS_MEMBER_ROLE}> can unban themselves.",
@@ -2107,7 +2204,17 @@ async def ban_unban_user(
 @arc.slash_subcommand("list", "List information for current thread")
 async def list_thread_info(
     ctx: arc.GatewayContext,
-    list_type: str,
+    list_type: arc.Option[
+        str,
+        arc.StrParams(
+            name="list_type",
+            description="What to list in the current thread",
+            choices={
+                "banned": "banned",
+                "permissions": "permissions",
+            },
+        ),
+    ],
 ) -> None:
     if not await validate_channel(ctx):
         await send_error(ctx, "This command can only be used in threads.")
@@ -2121,7 +2228,9 @@ async def list_thread_info(
 
     channel = await plugin.client.rest.fetch_channel(ctx.channel_id)
     channel_id = str(
-        channel.parent_id if isinstance(channel, hikari.GuildThreadChannel) else channel.id,
+        channel.parent_id
+        if isinstance(channel, hikari.GuildThreadChannel)
+        else channel.id,
     )
     post_id = str(channel.id)
 
@@ -2209,11 +2318,23 @@ async def list_thread_info(
 @arc.slash_subcommand("view", "View configuration files")
 async def list_debug_info(
     ctx: arc.GatewayContext,
-    view_type: str,
+    view_type: arc.Option[
+        str,
+        arc.StrParams(
+            name="view_type",
+            description="Which debug data to view",
+            choices={
+                "banned": "banned",
+                "permissions": "permissions",
+            },
+        ),
+    ],
 ) -> None:
     guild = await plugin.client.rest.fetch_guild(GUILD_ID)
     author_member = guild.get_member(ctx.author.id)
-    author_roles = {role.id for role in author_member.get_roles()} if author_member else set()
+    author_roles = (
+        {role.id for role in author_member.get_roles()} if author_member else set()
+    )
 
     if THREADS_ROLE_ID not in author_roles:
         await send_error(ctx, "Failed to use this command. You do not have permission.")
@@ -2251,7 +2372,11 @@ async def _get_merged_banned_users() -> set[tuple[str, str, str]]:
 
 async def _get_merged_permissions() -> set[tuple[str, str]]:
     await model.load_thread_permissions(THREAD_PERMISSIONS_FILE)
-    return {(thread_id, user_id) for thread_id, users in model.thread_permissions.items() for user_id in users}
+    return {
+        (thread_id, user_id)
+        for thread_id, users in model.thread_permissions.items()
+        for user_id in users
+    }
 
 
 async def _create_banned_user_embeds(
@@ -2302,7 +2427,9 @@ async def _create_permission_embeds(
             user = None
             with contextlib.suppress(Exception):
                 user = await plugin.client.rest.fetch_user(int(user_id))
-            thread_label = post.mention if post and hasattr(post, "mention") else f"<#{post_id}>"
+            thread_label = (
+                post.mention if post and hasattr(post, "mention") else f"<#{post_id}>"
+            )
             user_label = user.mention if user else user_id
             current.add_field(
                 name="Permission Entry",
@@ -2347,7 +2474,11 @@ async def send_paginated_response(
 @plugin.listen(hikari.MessageCreateEvent)
 async def on_message_create_for_moderation(event: hikari.MessageCreateEvent) -> None:
     message = event.message
-    if message.author is None or message.author.is_bot or not isinstance(event.channel_id, int):
+    if (
+        message.author is None
+        or message.author.is_bot
+        or not isinstance(event.channel_id, int)
+    ):
         return
 
     channel = await plugin.client.rest.fetch_channel(event.channel_id)
@@ -2407,7 +2538,9 @@ async def on_message_create_for_moderation(event: hikari.MessageCreateEvent) -> 
             ActionDetails(
                 action=ActionType.DELETE,
                 reason=warning,
-                post_name=channel.name if hasattr(channel, "name") and channel.name else str(channel.id),
+                post_name=channel.name
+                if hasattr(channel, "name") and channel.name
+                else str(channel.id),
                 actor=await plugin.client.rest.fetch_my_user(),
                 target=message.author,
                 channel=channel,
@@ -2468,7 +2601,9 @@ def bilibili_link(content: str) -> str:
                 r"https?://(?:www\.)?(?:b23\.tv|bilibili\.com/video/(?:BV\w+|av\d+))",
                 flags=re.IGNORECASE,
             ),
-            lambda url: sanitize_url(url) if "bilibili.com" in url.lower() else str(URL(url).with_host("b23.tf")),
+            lambda url: sanitize_url(url)
+            if "bilibili.com" in url.lower()
+            else str(URL(url).with_host("b23.tf")),
         ),
     ]
 
@@ -2506,7 +2641,11 @@ async def clean_query_params(
     return [
         (key, value)
         for key, value in params
-        if not any(re.match(rule, key, re.IGNORECASE) for rule in rules if isinstance(rule, str))
+        if not any(
+            re.match(rule, key, re.IGNORECASE)
+            for rule in rules
+            if isinstance(rule, str)
+        )
     ]
 
 
@@ -2523,7 +2662,11 @@ async def handle_redirections(
             if match:
                 group = match.group(1)
                 unquoted = unquote(group)
-                return await clean_any_url(unquoted, model.rules, False) if loop else unquoted
+                return (
+                    await clean_any_url(unquoted, model.rules, False)
+                    if loop
+                    else unquoted
+                )
         except Exception:
             continue
     return url
@@ -2552,7 +2695,11 @@ async def clean_any_url(
             return None
 
         exceptions = provider.get("exceptions", [])
-        if any(re.match(exc, url, re.IGNORECASE) for exc in exceptions if isinstance(exc, str)):
+        if any(
+            re.match(exc, url, re.IGNORECASE)
+            for exc in exceptions
+            if isinstance(exc, str)
+        ):
             continue
 
         redirected = await handle_redirections(url, provider, loop)
@@ -2586,7 +2733,9 @@ async def handle_modified_content(message: hikari.Message, new_content: str) -> 
         embed = await reply_embed(
             plugin.client,
             "Link Cleaned",
-            ("The link you sent may expose private tracking identifiers. Your message has been cleaned and reposted."),
+            (
+                "The link you sent may expose private tracking identifiers. Your message has been cleaned and reposted."
+            ),
             Color.WARNING,
         )
 
@@ -2595,8 +2744,16 @@ async def handle_modified_content(message: hikari.Message, new_content: str) -> 
             await plugin.client.rest.create_message(dm_channel.id, embed=embed)
 
         channel = await plugin.client.rest.fetch_channel(message.channel_id)
-        thread_id = channel.id if isinstance(channel, hikari.GuildThreadChannel) else hikari.UNDEFINED
-        parent_channel_id = channel.parent_id if isinstance(channel, hikari.GuildThreadChannel) else channel.id
+        thread_id = (
+            channel.id
+            if isinstance(channel, hikari.GuildThreadChannel)
+            else hikari.UNDEFINED
+        )
+        parent_channel_id = (
+            channel.parent_id
+            if isinstance(channel, hikari.GuildThreadChannel)
+            else channel.id
+        )
 
         webhook = await plugin.client.rest.create_webhook(
             parent_channel_id,
@@ -2608,7 +2765,9 @@ async def handle_modified_content(message: hikari.Message, new_content: str) -> 
                     webhook.id,
                     webhook.token,
                     content=new_content,
-                    username=message.author.username if hasattr(message.author, "username") else str(message.author.id),
+                    username=message.author.username
+                    if hasattr(message.author, "username")
+                    else str(message.author.id),
                     avatar_url=message.author.display_avatar_url
                     if hasattr(message.author, "display_avatar_url")
                     else hikari.UNDEFINED,
@@ -2789,7 +2948,9 @@ async def add_to_starboard(message: hikari.Message) -> None:
 
     embed.add_field(
         name="Source",
-        value=(f"[Jump to Message](https://discord.com/channels/{message.guild_id}/{message.channel_id}/{message.id})"),
+        value=(
+            f"[Jump to Message](https://discord.com/channels/{message.guild_id}/{message.channel_id}/{message.id})"
+        ),
         inline=True,
     )
     embed.add_field(
@@ -2824,7 +2985,8 @@ async def add_to_starboard(message: hikari.Message) -> None:
     content = message.content or ""
     if message.attachments:
         attachment_links = "\n".join(
-            f"[Attachment {index + 1}]({a.url})" for index, a in enumerate(message.attachments)
+            f"[Attachment {index + 1}]({a.url})"
+            for index, a in enumerate(message.attachments)
         )
         content = f"{content}\n\n{attachment_links}" if content else attachment_links
 
@@ -2944,10 +3106,6 @@ async def on_message_create_for_banned_users(event: hikari.MessageCreateEvent) -
 @plugin.listen(hikari.StoppingEvent)
 async def on_extension_unload(_: hikari.StoppingEvent) -> None:
     model.close()
-    pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
-    for task in pending:
-        task.cancel()
-    await asyncio.gather(*pending, return_exceptions=True)
 
 
 @arc.loader
@@ -2957,4 +3115,5 @@ def load(client: arc.GatewayClient) -> None:
 
 @arc.unloader
 def unload(client: arc.GatewayClient) -> None:
+    model.close()
     client.remove_plugin(plugin)
