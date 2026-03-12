@@ -10,19 +10,23 @@ import re
 from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 import aiohttp
 import arc
 import hikari
-import lmdb
 import miru
 from hikari.impl.special_endpoints import PollAnswerBuilder, PollBuilder
 from src.container.app import get_miru
 from src.shared.logger import get_module_logger
 from src.shared.persistence.constants import MSGPACK_DECODE_ERRORS
-from src.shared.persistence.store import Store, pack_msgpack, unpack_msgpack
+from src.shared.persistence.store import (
+    LmdbEnvironment,
+    Store,
+    pack_msgpack,
+    unpack_msgpack,
+)
 from src.shared.utils.view import (
     Color,
     bind_view_to_response,
@@ -36,16 +40,16 @@ from yarl import URL
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-BASE_DIR = pathlib.Path(__file__).resolve().parent
-BANNED_USERS_FILE = BASE_DIR / "banned_users.json"
-THREAD_PERMISSIONS_FILE = BASE_DIR / "thread_permissions.json"
-TIMEOUT_HISTORY_FILE = BASE_DIR / "timeout_history.json"
-STARRED_MESSAGES_FILE = BASE_DIR / "starred_messages.json"
-PHISHING_DB_FILE = BASE_DIR / "phishing_domains.json"
-SCRUB_RULES_FILE = BASE_DIR / "scrub_rules.json"
-DB_PATH = BASE_DIR / "threads"
-DB_MAP_SIZE: int = 50 * 1024 * 1024
-STORE_DATABASES: dict[str, str] = {
+BASE_DIR: Final[pathlib.Path] = pathlib.Path(__file__).resolve().parent
+BANNED_USERS_FILE: Final[pathlib.Path] = BASE_DIR / "banned_users.json"
+THREAD_PERMISSIONS_FILE: Final[pathlib.Path] = BASE_DIR / "thread_permissions.json"
+TIMEOUT_HISTORY_FILE: Final[pathlib.Path] = BASE_DIR / "timeout_history.json"
+STARRED_MESSAGES_FILE: Final[pathlib.Path] = BASE_DIR / "starred_messages.json"
+PHISHING_DB_FILE: Final[pathlib.Path] = BASE_DIR / "phishing_domains.json"
+SCRUB_RULES_FILE: Final[pathlib.Path] = BASE_DIR / "scrub_rules.json"
+DB_PATH: Final[pathlib.Path] = BASE_DIR / "threads"
+DB_MAP_SIZE: Final[int] = 50 * 1024 * 1024
+STORE_DATABASES: Final[dict[str, str]] = {
     BANNED_USERS_FILE.name: "banned_users",
     THREAD_PERMISSIONS_FILE.name: "thread_permissions",
     TIMEOUT_HISTORY_FILE.name: "timeout_history",
@@ -54,20 +58,20 @@ STORE_DATABASES: dict[str, str] = {
     SCRUB_RULES_FILE.name: "scrub_rules",
 }
 
-LOG_CHANNEL_ID = 1166627731916734504
-LOG_FORUM_ID = 1159097493875871784
-LOG_POST_ID = 1325393614343376916
-STARBOARD_FORUM_ID = 1168209956802142360
-STARBOARD_POST_ID = 1312109214533025904
-TAIWAN_ROLE_ID = 1261328929013108778
-THREADS_ROLE_ID = 1223635198327914639
-GUILD_ID = 1150630510696075404
-CONGRESS_FORUM_ID = 1196707789859459132
-CONGRESS_MEMBER_ROLE = 1200254783110525010
-CONGRESS_MOD_ROLE = 1300132191883235368
-POLL_FORUM_ID = (1155914521907568740,)
+LOG_CHANNEL_ID: Final[int] = 1166627731916734504
+LOG_FORUM_ID: Final[int] = 1159097493875871784
+LOG_POST_ID: Final[int] = 1325393614343376916
+STARBOARD_FORUM_ID: Final[int] = 1168209956802142360
+STARBOARD_POST_ID: Final[int] = 1312109214533025904
+TAIWAN_ROLE_ID: Final[int] = 1261328929013108778
+THREADS_ROLE_ID: Final[int] = 1223635198327914639
+GUILD_ID: Final[int] = 1150630510696075404
+CONGRESS_FORUM_ID: Final[int] = 1196707789859459132
+CONGRESS_MEMBER_ROLE: Final[int] = 1200254783110525010
+CONGRESS_MOD_ROLE: Final[int] = 1300132191883235368
+POLL_FORUM_ID: Final[tuple[int, ...]] = (1155914521907568740,)
 
-ROLE_CHANNEL_PERMISSIONS: dict[int, tuple[int, ...]] = {
+ROLE_CHANNEL_PERMISSIONS: Final[dict[int, tuple[int, ...]]] = {
     1223635198327914639: (
         1152311220557320202,
         1168209956802142360,
@@ -82,7 +86,7 @@ ROLE_CHANNEL_PERMISSIONS: dict[int, tuple[int, ...]] = {
     1213490790341279754: (1185259262654562355, 1151389184779636766),
     1251935385521750116: (1151389184779636766,),
 }
-ALLOWED_CHANNELS: tuple[int, ...] = (
+ALLOWED_CHANNELS: Final[tuple[int, ...]] = (
     1152311220557320202,
     1168209956802142360,
     1230197011761074340,
@@ -96,14 +100,16 @@ ALLOWED_CHANNELS: tuple[int, ...] = (
     1196707789859459132,
     1250396377540853801,
 )
-STAR_EMOJIS = ("✨", "⭐", "🌟", "💫")
-URL_PATTERN = re.compile(r"(https?://\S+)")
-EMOJI_PATTERN = re.compile(
+STAR_EMOJIS: Final[tuple[str, ...]] = ("✨", "⭐", "🌟", "💫")
+URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"(https?://\S+)")
+EMOJI_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[\U0001F300-\U0001F9FF]|[\u2600-\u26FF\u2700-\u27BF]|<a?:[a-zA-Z0-9_]+:[0-9]+>",
 )
-MENTION_PATTERN = re.compile(r"<[@#]&?\d+>|@everyone|@here")
-TOKEN_PATTERN = re.compile(r"<url>|<mention>|[a-z0-9_]+")
-INTERNAL_REPEAT_PATTERN = re.compile(r"(.{2,24}?)\1{3,}", re.DOTALL)
+MENTION_PATTERN: Final[re.Pattern[str]] = re.compile(r"<[@#]&?\d+>|@everyone|@here")
+TOKEN_PATTERN: Final[re.Pattern[str]] = re.compile(r"<url>|<mention>|[a-z0-9_]+")
+INTERNAL_REPEAT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(.{2,24}?)\1{3,}", re.DOTALL
+)
 
 logger = get_module_logger(__file__, __name__, "threads.log")
 
@@ -285,7 +291,7 @@ class ThreadModel:
             self.load_scrub_rules(SCRUB_RULES_FILE),
         )
 
-    def _open_env(self) -> lmdb.Environment:
+    def _open_env(self) -> LmdbEnvironment:
         self._store.open()
         env = self._store.env
         if env is None:
@@ -312,7 +318,7 @@ class ThreadModel:
             with env.begin(write=False, db=store_db) as txn:
                 for key, value in txn.cursor():
                     records[bytes(key)] = bytes(value)
-        except lmdb.Error:
+        except Exception:
             logger.exception("Failed to load records for store %s", db_name)
             return {}
         return records
@@ -341,7 +347,7 @@ class ThreadModel:
                 for key, packed in desired_packed.items():
                     if snapshot.get(key) != packed:
                         txn.put(key, packed)
-        except lmdb.Error:
+        except Exception:
             logger.exception("Failed to sync records for store %s", db_name)
             return
         snapshot.clear()
@@ -2601,9 +2607,11 @@ def bilibili_link(content: str) -> str:
                 r"https?://(?:www\.)?(?:b23\.tv|bilibili\.com/video/(?:BV\w+|av\d+))",
                 flags=re.IGNORECASE,
             ),
-            lambda url: sanitize_url(url)
-            if "bilibili.com" in url.lower()
-            else str(URL(url).with_host("b23.tf")),
+            lambda url: (
+                sanitize_url(url)
+                if "bilibili.com" in url.lower()
+                else str(URL(url).with_host("b23.tf"))
+            ),
         ),
     ]
 
